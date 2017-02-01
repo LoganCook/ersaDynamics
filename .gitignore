@@ -1,0 +1,9 @@
+*.pyc
+build/
+dist/
+edynam/README.md
+*.egg-info
+*_env/
+*.json
+.vscode
+tags
