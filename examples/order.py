@@ -45,3 +45,9 @@ logger.debug(order_handler.get_for_codes(rds_allocation_id))
 
 logger.debug('FOR codes of all RDS Allocation of %s' % account_name)
 logger.debug(order_handler.get_for_codes(rds_allocation_id, account_id=account_id))
+
+# Get eRSA Account: Order -> Manager (role) -> Username (contact)
+# It is an extension of a normal get role
+ersa_account_id = product_handler.get_id_of('eRSA Account')
+ersa_account_admin_role = {'id': '8355863e-85fc-e611-810b-e0071b6685b1', 'name': 'admin', 'extra': [('new_username', 'username')]}
+logger.debug(order_handler.get_product(ersa_account_id, roles=[ersa_account_admin_role]))

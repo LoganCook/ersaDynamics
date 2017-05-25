@@ -598,12 +598,17 @@ class Order(Handler):
         FetchXML.create_sub_elm(prod_filter, 'condition', {'attribute': 'productid', 'operator': 'eq', 'value': product_id})
 
     @staticmethod
-    def _add_connection_role_link(order_node, role_id, display_name):
+    def _add_connection_role_link(order_node, role_id, display_name, extra_fields=None):
         """Create node to get detail of a connection role
 
         It retrieves fullname as display_name (provided by caller);
                      emailaddress1 as email
                      parentcustomerid.name as unit
+        If extra_field is given, either a list or tuple of tuples,
+        each of element of it has to have only two elements for mapping internal name to label:
+        [0]: internal name and [1] label, e.g. new_username --> display_name + 'username'.
+        Note: extra_field is intend to be used as a low level argument: caller has to know
+        the internal name required.
         """
         link_elm = FetchXML.create_link(order_node, 'connection', 'record1id', 'salesorderid', 'outer')
         FetchXML.create_alias(link_elm, 'record2id', display_name + 'contactid')
@@ -618,6 +623,11 @@ class Order(Handler):
         FetchXML.create_alias(contact_link_elm, 'jobtitle', display_name + 'title')
         FetchXML.create_alias(contact_link_elm, 'fullname', display_name)
         FetchXML.create_alias(contact_link_elm, 'emailaddress1', display_name + 'email')
+        if extra_fields and type(extra_fields) in (list, tuple):
+            for extra in extra_fields:
+                assert len(extra) == 2
+                FetchXML.create_alias(contact_link_elm, extra[0], display_name + extra[1])
+
         account_link_elm = FetchXML.create_link(contact_link_elm, 'account', 'accountid', 'parentcustomerid', 'outer')
         FetchXML.create_alias(account_link_elm, 'name', display_name + 'unit')
 
@@ -625,7 +635,10 @@ class Order(Handler):
     def _add_role_link(entity, roles):
         for role in roles:
             assert 'id' in role and 'name' in role
-            Order._add_connection_role_link(entity, role['id'], role['name'])
+            if 'extra' in role:
+                Order._add_connection_role_link(entity, role['id'], role['name'], role['extra'])
+            else:
+                Order._add_connection_role_link(entity, role['id'], role['name'])
 
     @staticmethod
     def _add_prod_prop_link(entity, props):
