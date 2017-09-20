@@ -62,3 +62,24 @@ There are a few ways to install this module:
 Such file has two tokens: `access_token` and `refresh_token`. Call `retrieve` method in [ADALConnection](edynam/connection.py)
 to load them from a such file or `refresh` to refresh them either from a such file or previously loaded
 tokens.
+
+## About models - entities
+
+In [models.py](edynam/models.py) there are a few classes to represent entities of Dynamics:
+
+1. Project
+1. Product
+1. Account
+1. Contact
+1. Opportunity
+1. Order
+1. OrderDetail
+1. PropertyInstance
+1. DynamicProperty
+1. Optionset
+1. Connection
+1. ConnectionRole
+
+Some entities in the list above used in important relationships are show in the diagram blow. Some entities are not visible to end users.
+
+![order and related entities](./order.svg)
