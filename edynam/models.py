@@ -877,6 +877,7 @@ class DynamicProperty(Handler):
     END_POINT = 'dynamicproperties'
     FIELDS = ('name', 'description', 'datatype')
     VALUE_TYPES = {
+        0: 'optionset',
         1: 'valuedecimal',
         2: 'valuedouble',
         3: 'valuestring',
@@ -886,12 +887,13 @@ class DynamicProperty(Handler):
     @staticmethod
     def _normalise(prop):
         """Convert type (ntype) from number to type used in DynamicPropertyInstance
-           and remove space in property name (alias)
+           and remove space and / in property name (alias) bacause alias can only
+           have [A-Z], [a-z] or [0-9] or _
         """
         assert 'ntype' in prop
         prop['type'] = DynamicProperty.VALUE_TYPES[prop['ntype']]
         assert 'alias' in prop
-        prop['alias'] = prop['alias'].replace(' ', '')
+        prop['alias'] = prop['alias'].replace(' ', '').replace('/','')
 
     def get_properties_of(self, name):
         """Get product properties of a product
