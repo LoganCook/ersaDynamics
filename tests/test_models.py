@@ -6,7 +6,7 @@ from unittest.mock import patch
 from .context import edynam
 from edynam.connection import ADALConnection
 from edynam.dynamics import Dynamics
-from edynam.models import (Handler, Project, Product, Order)
+from edynam.models import (Handler, Project, Product, Order, DynamicPropertyOptionsetItem)
 
 
 logging.basicConfig(level=logging.DEBUG,
@@ -129,3 +129,23 @@ class TestModelHandler(unittest.TestCase):
         self.assertEqual(fetchXml.get('mapping'), 'logical')
         self.assertIsNotNone(fetchXml.find('entity'))
         self.assertEqual(len(entity.findall('attribute')), 2)
+
+    def test_dynamicpropertyoptionsetitem_entity(self):
+        # no option_value or is not an integer, returns empty string
+        optionitems_handler = DynamicPropertyOptionsetItem(self.dynamics)
+        value = optionitems_handler.get_option_value('449f2880-9eb3-e711-8156-e0071b684991')
+        self.assertEqual(value, '')
+        value = optionitems_handler.get_option_value('449f2880-9eb3-e711-8156-e0071b684991', 'x')
+        self.assertEqual(value, '')
+
+    def test_optionsetpropertyid_pattern(self):
+        # test alias + optionsetpropertyid pattern which is used in getting optionset properties from product
+        OPTIONSET_PATTERN = re.compile("^(.+)optionsetpropertyid$")
+        result = OPTIONSET_PATTERN.match('optionsetpropertyid')
+        self.assertIsNone(result)
+        result = OPTIONSET_PATTERN.match('OperatingSystemoptionsetpropertyid')
+        self.assertEqual(result.group(1), 'OperatingSystem')
+        result = OPTIONSET_PATTERN.match('optionsetpropertyidoptionsetpropertyid')
+        self.assertEqual(result.group(1), 'optionsetpropertyid')
+        result = OPTIONSET_PATTERN.match('optionsetpropertyid@OData.Community.Display.V1.FormattedValue')
+        self.assertIsNone(result)

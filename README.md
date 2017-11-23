@@ -33,6 +33,11 @@ There are a few ways to install this module:
     cd ersaDynamics
     python setup.py install
     ```
+1. pip + local
+    ```shell
+    source YOUR_VIRTURAL_ENV
+    pip install -e this_path
+    ```
 1. pip + github.com
     ```shell
     source YOUR_VIRTURAL_ENV
@@ -76,6 +81,7 @@ In [models.py](edynam/models.py) there are a few classes to represent entities o
 1. OrderDetail
 1. PropertyInstance
 1. DynamicProperty
+1. DynamicPropertyOptionsetItem
 1. Optionset
 1. Connection
 1. ConnectionRole

@@ -3,7 +3,7 @@ import logging
 
 from edynam.connection import ADALConnection
 from edynam.dynamics import Dynamics
-from edynam.models import Order, OrderDetail, DynamicProperty
+from edynam.models import Order, OrderDetail, DynamicProperty, DynamicPropertyOptionsetItem
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(levelname)s %(asctime)s %(filename)s %(module)s.%(funcName)s +%(lineno)d: %(message)s')
@@ -24,13 +24,16 @@ reader = Dynamics(conn)
 property_service = DynamicProperty(reader)
 logger.debug(property_service.list())
 
-# order_service = Order(reader)
-# order = order_service.get('a516d345-84f1-e611-810d-e0071b68f7c1')
-# logger.debug(order)
+propertyoptionset_service = DynamicPropertyOptionsetItem(reader)
+logger.debug(propertyoptionset_service.list())
 
-# orderdetail_service = OrderDetail(reader)
-# products = orderdetail_service.get_products_of('a516d345-84f1-e611-810d-e0071b68f7c1')
+order_service = Order(reader)
+order = order_service.get('9c07fafd-25cf-e711-812f-480fcff237d1')
+logger.debug(order)
 
-# for prod in products:
-#     logger.debug(prod)
-#     orderdetail_service.get_property_values(prod['salesorderdetailid'])
+orderdetail_service = OrderDetail(reader)
+products = orderdetail_service.get_products_of('9c07fafd-25cf-e711-812f-480fcff237d1')
+
+for prod in products:
+    logger.debug(prod)
+    orderdetail_service.get_property_values(prod['salesorderdetailid'])

@@ -511,6 +511,10 @@ class Opportunity(Handler):
     LOOKUPS = ('parentcontactid($select=fullname)', 'parentaccountid($select=name)')
 
 
+# this for seeding up interpretation optionset from product properties
+Optionsetitems = None
+
+
 class Order(Handler):
     """Sales order
 
@@ -536,6 +540,8 @@ class Order(Handler):
               'Complete': '100001',
               'Partial': '100002',
               'Invoiced': '100003'}
+
+    OPTIONSET_PATTERN = re.compile("^(.+)optionsetpropertyid$")
 
     @classmethod
     def _create_order_entity(cls, id_only=False, extra=None):
@@ -658,7 +664,12 @@ class Order(Handler):
         prod_link_elm = FetchXML.create_link(detail_elm, 'dynamicpropertyinstance', 'regardingobjectid', 'salesorderdetailid')
         if not required:
             prod_link_elm.set('link-type', 'outer')
-        FetchXML.create_alias(prod_link_elm, property_type, alias)
+        if property_type == 'optionset':
+            # To interpret this value it needs to get dynamicpropertyname whose dynamicpropertyvalue is this valueinteger
+            FetchXML.create_alias(prod_link_elm, 'valueinteger', alias)
+            FetchXML.create_alias(prod_link_elm, 'dynamicpropertyid', alias + 'optionsetpropertyid')
+        else:
+            FetchXML.create_alias(prod_link_elm, property_type, alias)
         filter_op = FetchXML.create_sub_elm(prod_link_elm, 'filter', {'type': 'and'})
         FetchXML.create_sub_elm(filter_op, 'condition', {'attribute': 'dynamicpropertyid', 'operator': 'eq', 'value': property_id})
 
@@ -713,7 +724,22 @@ class Order(Handler):
             self._add_role_link(entity, roles)
 
         logger.debug(FetchXML.to_string(fetch))
-        return self._backend.get(self.END_POINT, {'fetchXml': FetchXML.to_string(fetch)})
+        results = self._backend.get(self.END_POINT, {'fetchXml': FetchXML.to_string(fetch)})
+
+        global Optionsetitems
+        if not Optionsetitems:
+            Optionsetitems = DynamicPropertyOptionsetItem(self._backend)
+            Optionsetitems.construct_indexer()
+
+        for result in results:
+            properties = result.keys()
+            for prop in properties:
+                checker = self.OPTIONSET_PATTERN.match(prop)
+                if checker:
+                    prop_name = checker.group(1)
+                    if prop_name in result:
+                        result[prop_name] = Optionsetitems.get_option_value(result[prop], result[prop_name])
+        return results
 
     def get_account_products(self, account_id, role=None):
         """Get a list of Products sold to an Account
@@ -843,17 +869,29 @@ class OrderDetail(Handler):
 
         definitions = self.get_property_definitions(orderdetail_id)
         logger.debug(definitions)
-        # not finished because of the value type
+
+        optionsetitems_service = DynamicPropertyOptionsetItem(self._backend)
         value_dict = {}
         for prop in properties:
-            value_dict[definitions[prop['_dynamicpropertyid_value']]['name']] = prop[definitions[prop['_dynamicpropertyid_value']]['type']]
+            prop_id = prop['_dynamicpropertyid_value']
+            prop_name = definitions[prop_id]['name']
+            prop_type = definitions[prop_id]['type']
+            if prop_type == 'optionset':
+                value_dict[prop_name] = optionsetitems_service.get_option_value(prop_id, prop['valueinteger'])
+            else:
+                value_dict[prop_name] = prop[prop_type]
         logger.debug(value_dict)
         return value_dict
 
 
 class PropertyInstance(Handler):
     """Product property instance"""
-    # optionset is not supported
+    # There are four value holders for four basic types: integer, double, decimal, string.
+    # Depends on property's type, pick up correct value.
+    # For optionset, it needs valueinteger from propertyinstance to represents dynamicpropertyoptionvalue
+    # in propertyoptionsetitems to get dynamicpropertyoptionname which is a human understandable string.
+    # That is to say if there are properties is optionset list() is not enough as it misses the second step.
+    # See OrderDetail.get_property_values
     END_POINT = 'dynamicpropertyinstances'
     FIELDS = ('valueinteger', 'valuedouble', 'valuedecimal', 'valuestring', '_regardingobjectid_value', '_dynamicpropertyid_value')
     # LOOKUPS = ('dynamicpropertyid($select=name)', )
@@ -936,6 +974,43 @@ class DynamicProperty(Handler):
         for prop in properties:
             self._normalise(prop)
         return properties
+
+
+class DynamicPropertyOptionsetItem(Handler):
+    """Product Optionset property definitions: Use as a dictionary"""
+
+    END_POINT = 'dynamicpropertyoptionsetitems'
+    FIELDS = ('dynamicpropertyoptionname', 'dynamicpropertyoptionvalue', 'dynamicpropertyoptiondescription', '_dynamicpropertyid_value')
+
+    def construct_indexer(self):
+        def _make_dict(defintions):
+            indexer = {}
+            for defintion in defintions:
+                prop_id = defintion['_dynamicpropertyid_value']
+                if not prop_id in indexer:
+                    indexer[prop_id] = {}
+                indexer[prop_id][defintion['dynamicpropertyoptionvalue']] = defintion['dynamicpropertyoptionname']
+            return indexer
+
+        self._local_indexer = _make_dict(self.list())
+
+    def get_option_value(self, property_id, option_value=None):
+        # if option value (has to be valueinteger) is null, do not call this
+        # dynamicpropertyoptionsetitems?$select=dynamicpropertyoptionname&$filter=_dynamicpropertyid_value eq 449f2880-9eb3-e711-8156-e0071b684991 and dynamicpropertyoptionvalue eq 1
+        try:
+            option_value = int(option_value)
+        except (ValueError, TypeError):
+            return ""
+
+        if hasattr(self, '_local_indexer'):
+            # if caller called DynamicPropertyOptionsetItem.construct_indexer()
+            return self._local_indexer[property_id][option_value]
+        else:
+            selects = self.create_select(('dynamicpropertyoptionname',))
+            optionitem_filter =  self.create_filter('_dynamicpropertyid_value eq %s and dynamicpropertyoptionvalue eq %s' % (property_id, option_value))
+            result_list = self.list(selects=selects, extra=optionitem_filter)
+            assert(len(result_list) == 1)
+            return result_list[0]['dynamicpropertyoptionname']
 
 
 class Optionset(Handler):
