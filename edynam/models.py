@@ -659,16 +659,20 @@ class Order(Handler):
         :param str property_id: UUID of a DynamicProperty
         :param str property_type: type to be returned: one of valueXXXX
         :param str alias: name of a DynamicProperty, used to set the alias attribute
-        :param bool required: control either to be an inner or outer join. Default = True. may be redundant
+        :param bool required: control either to be an inner or outer join. Default = True. 'outer' has to be set to the last link-entity
         """
         prod_link_elm = FetchXML.create_link(detail_elm, 'dynamicpropertyinstance', 'regardingobjectid', 'salesorderdetailid')
-        if not required:
-            prod_link_elm.set('link-type', 'outer')
         if property_type == 'optionset':
-            # To interpret this value it needs to get dynamicpropertyname whose dynamicpropertyvalue is this valueinteger
-            FetchXML.create_alias(prod_link_elm, 'valueinteger', alias)
-            FetchXML.create_alias(prod_link_elm, 'dynamicpropertyid', alias + 'optionsetpropertyid')
+            # link to dynamicpropertyoptionsetitem by property_id and return optionname
+            optionset_link_elm = FetchXML.create_link(prod_link_elm, 'dynamicpropertyoptionsetitem', 'dynamicpropertyoptionvalue', 'valueinteger')
+            if not required:
+                optionset_link_elm.set('link-type', 'outer')
+            filter_op_of_optionset = FetchXML.create_sub_elm(optionset_link_elm, 'filter', {'type': 'and'})
+            FetchXML.create_sub_elm(filter_op_of_optionset, 'condition', {'attribute': 'dynamicpropertyid', 'operator': 'eq', 'value': property_id})
+            FetchXML.create_alias(optionset_link_elm, 'dynamicpropertyoptionname', alias)
         else:
+            if not required:
+                prod_link_elm.set('link-type', 'outer')
             FetchXML.create_alias(prod_link_elm, property_type, alias)
         filter_op = FetchXML.create_sub_elm(prod_link_elm, 'filter', {'type': 'and'})
         FetchXML.create_sub_elm(filter_op, 'condition', {'attribute': 'dynamicpropertyid', 'operator': 'eq', 'value': property_id})
@@ -724,22 +728,7 @@ class Order(Handler):
             self._add_role_link(entity, roles)
 
         logger.debug(FetchXML.to_string(fetch))
-        results = self._backend.get(self.END_POINT, {'fetchXml': FetchXML.to_string(fetch)})
-
-        global Optionsetitems
-        if not Optionsetitems:
-            Optionsetitems = DynamicPropertyOptionsetItem(self._backend)
-            Optionsetitems.construct_indexer()
-
-        for result in results:
-            properties = result.keys()
-            for prop in properties:
-                checker = self.OPTIONSET_PATTERN.match(prop)
-                if checker:
-                    prop_name = checker.group(1)
-                    if prop_name in result:
-                        result[prop_name] = Optionsetitems.get_option_value(result[prop], result[prop_name])
-        return results
+        return self._backend.get(self.END_POINT, {'fetchXml': FetchXML.to_string(fetch)})
 
     def get_account_products(self, account_id, role=None):
         """Get a list of Products sold to an Account
