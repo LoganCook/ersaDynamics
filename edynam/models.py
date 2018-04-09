@@ -555,6 +555,7 @@ class Order(Handler):
         #     <entity name="salesorder">
         #         <attribute name="name" />
         #         <attribute name="new_orderid" alias="orderID" />
+        #         <attribute name="pricelevelid" alias="pricelevelID" />
         #     </entity>
         # </fetch>
 
@@ -565,6 +566,7 @@ class Order(Handler):
         else:
             FetchXML.create_sub_elm(entity, 'attribute', {'name': 'name'})
             FetchXML.create_alias(entity, 'new_orderid', 'orderID')
+            FetchXML.create_alias(entity, 'pricelevelid', 'pricelevelID')
             if extra:
                 for attr in extra:
                     if 'alias' in attr:
