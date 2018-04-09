@@ -36,7 +36,7 @@ class Handler(object):
         # construct a dictionary with
         fields = list(getattr(self, attr, []))
         fields.extend(extra)
-        if len(fields):
+        if fields:
             return {key: ','.join(fields)}
         else:
             return None
@@ -284,6 +284,44 @@ class Product(Handler):
         selects = self.create_select(('name', ))
         filter_option = self._active_product_filter()
         return super().list(selects=selects, extra=filter_option)
+
+
+class ProductPricelist(Handler):
+    """Prices of products on a price list
+
+    Information about price of a product on the specified price list, including pricing method, rounding option, and discount type based on a specified product unit.
+    Only support pricingmethodcode 1 : Currency Amount, quantitysellingcode is ignored
+    """
+    ENTITY = 'productpricelevel'
+    END_POINT = 'productpricelevels'
+    FIELDS = ('_productid_value', 'productnumber', '_pricelevelid_value', '_uomid_value', 'amount')
+    MAPS = {'_pricelevelid_value': {'raw': 'pricelevelid', 'formatted': 'pricelevel'},
+            '_productid_value': {'raw': 'productid', 'formatted': 'product'},
+            '_uomid_value': {'raw': 'uomid', 'formatted': 'uom'}}
+
+    def get_prices(self, name):
+        """Get prices of a product represented by its name"""
+        # <fetch mapping="logical">
+        #     <entity name="productpricelevel">
+        #         <attribute name="pricelevelid" />
+        #         <attribute name="amount" />
+        #         <link-entity name="product" to="productid" from="productid">
+        #             <filter type="and">
+        #               <condition attribute="name" operator="eq" value="VM Disk" />
+        #             </filter>
+        #         </link-entity>
+        #     </entity>
+        # </fetch>
+        fetch = FetchXML.create_fetch()
+        entity = FetchXML.create_entity(fetch, self.ENTITY)
+        FetchXML.create_sub_elm(entity, 'attribute', {'name': 'pricelevelid'})
+        FetchXML.create_sub_elm(entity, 'attribute', {'name': 'amount'})
+        product_link = FetchXML.create_link(entity, 'product', 'productid', 'productid')
+
+        filter_op = FetchXML.create_sub_elm(product_link, 'filter', {'type': 'and'})
+        FetchXML.create_sub_elm(filter_op, 'condition', {'attribute': 'name', 'operator': 'eq', 'value': name})
+        logger.debug(FetchXML.to_string(fetch))
+        return self._backend.get(self.END_POINT, {'fetchXml': FetchXML.to_string(fetch)})
 
 
 class Account(Handler):
