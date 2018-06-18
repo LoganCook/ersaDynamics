@@ -14,6 +14,7 @@ class Handler(object):
     """
 
     # all date type fields have value in UTC which need to be converted into local time
+    ENTITY = ''
     END_POINT = ''
     FIELDS = ()
     LOOKUPS = ()
@@ -154,6 +155,7 @@ class Handler(object):
                     flatted[self.MAPS[extracted_key]] = v
             else:
                 flatted[k] = v
+        logger.debug(flatted)
         return flatted
 
     def map_list(self, items):
@@ -203,11 +205,7 @@ class Handler(object):
             return []
         else:
             # logger.debug(data)
-            for item in data:
-                # logger.debug(item)
-                logger.debug(self.map(item))
-                # break
-            return data
+            return [self.map(item) for item in data]
 
     def get(self, entity_id, selects=None, expands=None, extra=None):
         """Get entity by its id"""
@@ -230,7 +228,7 @@ class Handler(object):
         else:
             entity_id = self.END_POINT[:-1] + 'id'
         data = self._backend.get(self.END_POINT, {'$select': entity_id, '$filter': "name eq '%s'" % name})
-        assert len(data) < 2
+        assert len(data) > 0 and len(data) < 2
         return data[0][entity_id]
 
 
@@ -247,14 +245,21 @@ class Project(Handler):
 class Product(Handler):
     """Chargeable items
 
-    Each item can have unit (defaultuomid), unit group (defaultuomscheduleid),
-    parent product (parentproductid). hierarchypath is a string representation of relationship
-    between related products.
+    Each Product has unit (defaultuomid), unit group (defaultuomscheduleid),
+    structure (productstructure), e.g. Family and type (producttypecode) e.g. Services.
+    It may also have parent product (parentproductid). If so, hierarchypath
+    is a string representation of relationship between related hierarchical products.
     """
     ENTITY = 'product'  # used in fetchXml, avoid guessing singular or plural
     END_POINT = 'products'
-    FIELDS = ('name', 'description', 'hierarchypath', 'price', 'productnumber', 'validtodate', 'validfromdate', 'producturl', 'productstructure')
-    LOOKUPS = ('parentproductid($select=name)', 'defaultuomid($select=name)', 'defaultuomscheduleid($select=name)')
+    FIELDS = ('name', 'productnumber', 'description', 'hierarchypath', 'price', 'producturl',
+              'validtodate', 'validfromdate', 'productstructure', 'producttypecode',
+              '_defaultuomid_value', '_defaultuomscheduleid_value', '_parentproductid_value')
+    MAPS = {'_defaultuomid_value': {'raw': 'defaultuomid', 'formatted': 'defaultuom'},
+            '_defaultuomscheduleid_value': {'raw': 'defaultuomscheduleid', 'formatted': 'defaultuomschedule'},
+            'producttypecode': {'raw': 'producttypecode', 'formatted': 'producttype'},
+            'productstructure': {'raw': 'productstructurecode', 'formatted': 'productstructure'},
+            '_parentproductid_value': {'raw': 'parentproductid', 'formatted': 'parentproduct'}}
 
     @classmethod
     def _active_product_filter(cls):
@@ -294,30 +299,40 @@ class ProductPricelist(Handler):
     """
     ENTITY = 'productpricelevel'
     END_POINT = 'productpricelevels'
-    FIELDS = ('_productid_value', 'productnumber', '_pricelevelid_value', '_uomid_value', 'amount')
+    FIELDS = ('productnumber', '_pricelevelid_value', '_uomid_value', 'amount')
+    LOOKUPS = ('productid($select=productid,producttypecode,productnumber,productstructure)', )
     MAPS = {'_pricelevelid_value': {'raw': 'pricelevelid', 'formatted': 'pricelevel'},
             '_productid_value': {'raw': 'productid', 'formatted': 'product'},
+            'productid': {'productnumber': 'productnumber',
+                          'producttypecode@OData.Community.Display.V1.FormattedValue': 'producttype',
+                          'productstructure@OData.Community.Display.V1.FormattedValue': 'productstructure'},
             '_uomid_value': {'raw': 'uomid', 'formatted': 'uom'}}
 
     def get_prices(self, name):
         """Get prices of a product represented by its name"""
-        # <fetch mapping="logical">
+        # fetchXml=<fetch mapping="logical">
         #     <entity name="productpricelevel">
         #         <attribute name="pricelevelid" />
         #         <attribute name="amount" />
         #         <link-entity name="product" to="productid" from="productid">
+        #             <attribute name="producttypecode" alias="productTypeCode"/>
+        #             <attribute name="productstructure" alias="productStructureCode"/>
         #             <filter type="and">
         #               <condition attribute="name" operator="eq" value="VM Disk" />
         #             </filter>
         #         </link-entity>
         #     </entity>
         # </fetch>
+
+        # Note: field names are not the same as in list method.
         fetch = FetchXML.create_fetch()
         entity = FetchXML.create_entity(fetch, self.ENTITY)
         FetchXML.create_sub_elm(entity, 'attribute', {'name': 'pricelevelid'})
         FetchXML.create_sub_elm(entity, 'attribute', {'name': 'amount'})
-        product_link = FetchXML.create_link(entity, 'product', 'productid', 'productid')
 
+        product_link = FetchXML.create_link(entity, 'product', 'productid', 'productid')
+        FetchXML.create_alias(product_link, 'producttypecode', 'productTypeCode')
+        FetchXML.create_alias(product_link, 'productstructure', 'productStructureCode')
         filter_op = FetchXML.create_sub_elm(product_link, 'filter', {'type': 'and'})
         FetchXML.create_sub_elm(filter_op, 'condition', {'attribute': 'name', 'operator': 'eq', 'value': name})
         logger.debug(FetchXML.to_string(fetch))
@@ -954,13 +969,13 @@ class DynamicProperty(Handler):
     @staticmethod
     def _normalise(prop):
         """Convert type (ntype) from number to type used in DynamicPropertyInstance
-           and remove space and / in property name (alias) bacause alias can only
+           and remove space and / in property name (alias) because alias can only
            have [A-Z], [a-z] or [0-9] or _
         """
         assert 'ntype' in prop
         prop['type'] = DynamicProperty.VALUE_TYPES[prop['ntype']]
         assert 'alias' in prop
-        prop['alias'] = prop['alias'].replace(' ', '').replace('/','')
+        prop['alias'] = prop['alias'].replace(' ', '').replace('/', '')
 
     def get_properties_of(self, name):
         """Get product properties of a product
@@ -1016,7 +1031,7 @@ class DynamicPropertyOptionsetItem(Handler):
             indexer = {}
             for defintion in defintions:
                 prop_id = defintion['_dynamicpropertyid_value']
-                if not prop_id in indexer:
+                if prop_id not in indexer:
                     indexer[prop_id] = {}
                 indexer[prop_id][defintion['dynamicpropertyoptionvalue']] = defintion['dynamicpropertyoptionname']
             return indexer
@@ -1036,9 +1051,9 @@ class DynamicPropertyOptionsetItem(Handler):
             return self._local_indexer[property_id][option_value]
         else:
             selects = self.create_select(('dynamicpropertyoptionname',))
-            optionitem_filter =  self.create_filter('_dynamicpropertyid_value eq %s and dynamicpropertyoptionvalue eq %s' % (property_id, option_value))
+            optionitem_filter = self.create_filter('_dynamicpropertyid_value eq %s and dynamicpropertyoptionvalue eq %s' % (property_id, option_value))
             result_list = self.list(selects=selects, extra=optionitem_filter)
-            assert(len(result_list) == 1)
+            assert len(result_list) == 1
             return result_list[0]['dynamicpropertyoptionname']
 
 
@@ -1142,3 +1157,59 @@ class ConnectionRole(Handler):
         data = self._backend.get(self.END_POINT, {'$select': 'connectionroleid', '$filter': "name eq '%s' and category eq %s" % (name, category)})
         assert len(data) == 1
         return data[0]['connectionroleid']
+
+
+class Substitute(Handler):
+    """Product substitutes - for complex product types
+
+    Use salesrelationshiptype = Accessory to define relationship
+    between products for pricing (complex product):
+    if the product is of 'Miscellaneous Charges' type, the
+      Accessory relationship define a pseudo product: only accessories
+      are used for pricing;
+    if the product is of any type except 'Miscellaneous Charges' type,
+      the Accessory relationship define a super product: it contains
+      itself and all accessories.
+    """
+    # {
+    #     "@odata.etag": "W/\"11222833\"",
+    #     "productsubstituteid": "eddac4ea-3b70-e811-814a-e0071b686a81",
+    #     "createdon": "15/06/2018 11:02 AM",
+    #     "statecode": 0,
+    #     "state": "Active",
+    #     "salesrelationshiptypecode": 2,
+    #     "salesrelationshiptype": "Accessory",
+    #     "directioncode": 0,
+    #     "direction": "Uni-Directional",
+    #     "product": "Linked product start",
+    #     "substitutedproduct": "Linked product the other end",
+    #     "productid": "c0a94595-3b70-e811-814a-e0071b686a81",
+    #     "substitutedproductid": "238b4fa2-3b70-e811-814a-e0071b686a81",
+    #     "producttype": "Sales Inventory",
+    #     "substitutedproducttype": "Sales Inventory",
+    #     "productnumber": "lilinkedproduct1",
+    #     "substitutedproductnumber": "lilinkedproduct1-201806150130081897",
+    #     "productstructure": "Product",
+    #     "substitutedproductstructure": "Product"
+    # }
+    END_POINT = 'productsubstitutes'
+    FIELDS = ('createdon', 'salesrelationshiptype', 'direction', 'statecode')
+    LOOKUPS = ('productid($select=productid,producttypecode,productnumber,productstructure)',
+               'substitutedproductid($select=productid,producttypecode,productnumber,productstructure)')
+    MAPS = {'statecode': {'raw': 'statecode', 'formatted': 'state'},
+            'createdon': {'formatted': 'createdon'},
+            'direction': {'raw': 'directioncode', 'formatted': 'direction'},
+            '_productid_value': {'raw': 'productid', 'formatted': 'product'},
+            'productid': {'productnumber': 'productnumber',
+                          'producttypecode@OData.Community.Display.V1.FormattedValue': 'producttype',
+                          'productstructure@OData.Community.Display.V1.FormattedValue': 'productstructure'},
+            '_substitutedproductid_value': {'raw': 'substitutedproductid', 'formatted': 'substitutedproduct'},
+            'substitutedproductid': {'productnumber': 'substitutedproductnumber',
+                                     'producttypecode@OData.Community.Display.V1.FormattedValue': 'substitutedproducttype',
+                                     'productstructure@OData.Community.Display.V1.FormattedValue': 'substitutedproductstructure'},
+            'salesrelationshiptype': {'raw': 'salesrelationshiptypecode', 'formatted': 'salesrelationshiptype'}}
+
+    def get_linked_from(self, product_id):
+        """Get a list of linked products defined for product_id"""
+        filter_option = self.create_filter('_productid_value eq %s' % product_id)
+        return super().list(extra=filter_option)

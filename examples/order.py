@@ -35,8 +35,8 @@ order_handler.get_account_products(account_id, manager_role)
 prop_defs = product_handler.get_property_definitions('TANGO Cloud VM', ('OpenstackProjectID', 'OperatingSystem'))
 logger.debug("Make optionset property OperatingSystem optional")
 for prop in prop_defs:
-  if prop['type'] == 'optionset':
-    prop['required'] = False
+    if prop['type'] == 'optionset':
+        prop['required'] = False
 logger.debug(prop_defs)
 logger.debug(order_handler.get_product(nectar_allocation_id, prod_props=prop_defs))
 logger.debug(order_handler.get_product(nectar_allocation_id, prod_props=prop_defs, account_id=account_id))
@@ -47,7 +47,7 @@ logger.debug(order_handler.get_for_codes())
 logger.debug('FOR codes of all RDS Allocation')
 logger.debug(order_handler.get_for_codes(rds_allocation_id))
 
-logger.debug('FOR codes of all RDS Allocation of %s' % account_name)
+logger.debug('FOR codes of all RDS Allocation of %s', account_name)
 logger.debug(order_handler.get_for_codes(rds_allocation_id, account_id=account_id))
 
 # Get eRSA Account: Order -> Manager (role) -> Username (contact)
