@@ -45,7 +45,7 @@ class TestModelHandler(unittest.TestCase):
             self.assertIsNotNone(customer_id_pat.match(tbm))
 
     def test_build_query_fields(self):
-        handler = Product(self.dynamics)
+        handler = Project(self.dynamics)
         select = handler.select()['$select']
         expand = handler.expand()['$expand']
 
@@ -128,7 +128,7 @@ class TestModelHandler(unittest.TestCase):
         fetchXml, entity = order_handler._create_order_entity()
         self.assertEqual(fetchXml.get('mapping'), 'logical')
         self.assertIsNotNone(fetchXml.find('entity'))
-        self.assertEqual(len(entity.findall('attribute')), 2)
+        self.assertEqual(len(entity.findall('attribute')), 3)
 
     def test_dynamicpropertyoptionsetitem_entity(self):
         # no option_value or is not an integer, returns empty string
