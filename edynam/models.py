@@ -373,7 +373,7 @@ class Account(Handler):
             link = FetchXML.create_link(entity, 'account', 'accountid', 'customerid')
             FetchXML.create_alias(link, 'name', 'name')
             logger.debug(FetchXML.to_string(fetch))
-            return self._backend.get(self.END_POINT, {'fetchXml': FetchXML.to_string(fetch)})
+            return self._backend.get(Order.END_POINT, {'fetchXml': FetchXML.to_string(fetch)})
 
     def get_child_of(self, parent_id):
         selects = self.create_select(('name', ))

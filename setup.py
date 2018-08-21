@@ -3,7 +3,7 @@
 from setuptools import setup
 
 setup(name='ersa-Dynamics',
-      version='0.0.4',
+      version='0.0.5',
       description='Utility module at eRSA to MS Dynamics',
       license='GPLv3',
       author='eResearch SA',
